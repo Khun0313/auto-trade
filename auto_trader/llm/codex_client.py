@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from utils.logger import get_logger
 from llm.codex_auth import (
     get_auth_headers,
+    get_openai_api_key_from_auth,
     is_logged_in,
     refresh_access_token,
     run_login,
@@ -55,8 +56,14 @@ class CodexClient:
         if self._use_oauth:
             logger.info("ChatGPT OAuth 방식으로 초기화 (ChatGPT Plus)")
         else:
-            api_key = os.getenv("OPENAI_API_KEY", "")
+            # .env → auth.json 순으로 API Key 탐색
+            api_key = (
+                os.getenv("OPENAI_API_KEY", "")
+                or get_openai_api_key_from_auth()
+                or ""
+            )
             if api_key:
+                os.environ["OPENAI_API_KEY"] = api_key  # openai 라이브러리에 주입
                 logger.warning(
                     "Codex OAuth 토큰이 없습니다. OPENAI_API_KEY 폴백 사용 중. "
                     "'python -m llm.codex_auth --login' 으로 로그인하세요."

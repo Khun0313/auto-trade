@@ -129,11 +129,21 @@ def _record_refresh_token_issued():
 # 토큰 조회
 # ──────────────────────────────────────────────────────────────
 
+def _get_tokens_dict(auth: dict) -> dict:
+    """auth.json에서 토큰 딕셔너리를 반환한다.
+
+    Codex CLI는 {"tokens": {"access_token": ..., "refresh_token": ...}} 형태로 저장.
+    구버전은 최상위에 바로 저장하는 경우도 있으므로 두 경우 모두 처리한다.
+    """
+    return auth.get("tokens") or auth
+
+
 def get_access_token() -> Optional[str]:
     """access token을 반환한다. 없으면 None."""
     auth = _read_auth_file()
-    for key in ("accessToken", "access_token", "token"):
-        val = auth.get(key)
+    tokens = _get_tokens_dict(auth)
+    for key in ("access_token", "accessToken", "token"):
+        val = tokens.get(key)
         if val:
             return val
     return None
@@ -142,18 +152,29 @@ def get_access_token() -> Optional[str]:
 def get_refresh_token() -> Optional[str]:
     """refresh token을 반환한다. 없으면 None."""
     auth = _read_auth_file()
-    for key in ("refreshToken", "refresh_token"):
-        val = auth.get(key)
+    tokens = _get_tokens_dict(auth)
+    for key in ("refresh_token", "refreshToken"):
+        val = tokens.get(key)
         if val:
             return val
     return None
 
 
+def get_openai_api_key_from_auth() -> Optional[str]:
+    """auth.json에 저장된 OPENAI_API_KEY를 반환한다. 없으면 None.
+
+    Codex CLI는 API Key 방식 로그인 시 auth.json에 OPENAI_API_KEY를 저장한다.
+    """
+    auth = _read_auth_file()
+    return auth.get("OPENAI_API_KEY") or None
+
+
 def _get_client_id() -> Optional[str]:
     """client_id를 auth.json에서 읽는다."""
     auth = _read_auth_file()
-    for key in ("clientId", "client_id"):
-        val = auth.get(key)
+    tokens = _get_tokens_dict(auth)
+    for key in ("client_id", "clientId"):
+        val = tokens.get(key)
         if val:
             return val
     return None
