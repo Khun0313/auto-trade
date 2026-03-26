@@ -20,6 +20,7 @@ from utils.logger import get_logger
 from llm.codex_auth import (
     get_auth_headers,
     get_openai_api_key_from_auth,
+    get_auth_mode,
     is_logged_in,
     refresh_access_token,
     run_login,
@@ -52,20 +53,34 @@ class CodexClient:
     """
 
     def __init__(self):
-        self._use_oauth = is_logged_in()
-        if self._use_oauth:
+        # ── 1) API Key를 항상 먼저 환경변수에 주입 (.env → auth.json 순) ──
+        api_key = (
+            os.getenv("OPENAI_API_KEY", "")
+            or get_openai_api_key_from_auth()
+            or ""
+        )
+        if api_key and not os.getenv("OPENAI_API_KEY"):
+            os.environ["OPENAI_API_KEY"] = api_key
+
+        # ── 2) auth_mode 확인: apiKey 모드면 OAuth 시도하지 않음 ──
+        auth_mode = get_auth_mode()
+        if auth_mode == "apiKey":
+            self._use_oauth = False
+            if api_key:
+                logger.info("Codex API Key 모드 (auth.json의 OPENAI_API_KEY 사용)")
+            else:
+                logger.error(
+                    "auth_mode=apiKey 이나 API Key가 없습니다. "
+                    ".env에 OPENAI_API_KEY를 설정하세요."
+                )
+        elif is_logged_in():
+            self._use_oauth = True
             logger.info("ChatGPT OAuth 방식으로 초기화 (ChatGPT Plus)")
         else:
-            # .env → auth.json 순으로 API Key 탐색
-            api_key = (
-                os.getenv("OPENAI_API_KEY", "")
-                or get_openai_api_key_from_auth()
-                or ""
-            )
+            self._use_oauth = False
             if api_key:
-                os.environ["OPENAI_API_KEY"] = api_key  # openai 라이브러리에 주입
                 logger.warning(
-                    "Codex OAuth 토큰이 없습니다. OPENAI_API_KEY 폴백 사용 중. "
+                    "OAuth 토큰 없음. OPENAI_API_KEY 폴백 사용 중. "
                     "'python -m llm.codex_auth --login' 으로 로그인하세요."
                 )
             else:

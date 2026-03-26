@@ -160,6 +160,16 @@ def get_refresh_token() -> Optional[str]:
     return None
 
 
+def get_auth_mode() -> str:
+    """auth.json의 auth_mode를 반환한다.
+
+    Returns:
+        "apiKey" | "oauth" | "unknown"
+    """
+    auth = _read_auth_file()
+    return auth.get("auth_mode", "unknown")
+
+
 def get_openai_api_key_from_auth() -> Optional[str]:
     """auth.json에 저장된 OPENAI_API_KEY를 반환한다. 없으면 None.
 
