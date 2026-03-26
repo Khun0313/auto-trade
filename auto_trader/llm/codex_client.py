@@ -100,10 +100,11 @@ class CodexClient:
     # ──────────────────────────────────────────────
 
     def _call_oauth(self, prompt: str, max_tokens: int = 2000) -> str:
-        """ChatGPT OAuth 토큰으로 Codex 백엔드 API를 호출한다.
+        """ChatGPT OAuth 토큰으로 Codex 백엔드 API를 호출한다 (SSE 스트리밍).
 
         엔드포인트: https://chatgpt.com/backend-api/codex/responses
-        OpenCode의 opencode-openai-codex-auth 플러그인과 동일한 방식.
+        opencode-openai-codex-auth 플러그인과 동일한 방식.
+        Codex 백엔드는 stream=true가 필수이므로 SSE로 응답을 수신한다.
         """
         import requests
 
@@ -119,10 +120,7 @@ class CodexClient:
                 }
             ],
             "store": False,
-            "stream": False,
-            "include": ["reasoning.encrypted_content"],
-            "reasoning": {"summary": "auto"},
-            "max_output_tokens": max_tokens,
+            "stream": True,
         }
 
         try:
@@ -130,11 +128,11 @@ class CodexClient:
                 CODEX_RESPONSES_URL,
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=120,
+                stream=True,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return self._extract_text_from_response(data)
+            return self._parse_sse_response(resp)
 
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else 0
@@ -142,7 +140,6 @@ class CodexClient:
             logger.warning("OAuth HTTP %s: %s", status, body)
 
             if status == 401:
-                # 1차: refresh_token으로 재발급 시도
                 logger.warning("OAuth 401 — refresh_token으로 토큰 갱신 시도...")
                 new_token = refresh_access_token()
                 if new_token:
@@ -152,35 +149,40 @@ class CodexClient:
                         CODEX_RESPONSES_URL,
                         headers=headers,
                         json=payload,
-                        timeout=60,
+                        timeout=120,
+                        stream=True,
                     )
                     resp2.raise_for_status()
-                    return self._extract_text_from_response(resp2.json())
+                    return self._parse_sse_response(resp2)
                 else:
                     logger.warning("토큰 갱신 실패. OPENAI_API_KEY 폴백으로 전환합니다.")
                     _notify_relogin_required()
                     return self._call_openai_api(prompt, max_tokens)
             raise
 
-    def _extract_text_from_response(self, data: dict) -> str:
-        """Codex 백엔드 API 응답에서 텍스트를 추출한다."""
-        # Codex 응답 구조: {"output": [{"type": "message", "content": [{"type": "output_text", "text": "..."}]}]}
-        output = data.get("output", [])
-        for item in output:
-            if item.get("type") == "message":
-                for content in item.get("content", []):
-                    if content.get("type") == "output_text":
-                        return content.get("text", "")
-                    # text 키만 있는 경우
-                    if "text" in content and content.get("type") != "input_text":
-                        return content["text"]
-        # 폴백: choices 형식 (표준 OpenAI 응답)
-        choices = data.get("choices", [])
-        if choices:
-            return choices[0].get("message", {}).get("content", "")
-        # 최후 폴백: 전체 응답 문자열화
-        logger.warning("응답에서 텍스트 추출 실패. 전체 응답: %s", str(data)[:300])
-        return str(data)
+    def _parse_sse_response(self, resp) -> str:
+        """SSE 스트리밍 응답에서 텍스트를 조립한다."""
+        text_parts = []
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+            if not line_str.startswith("data: "):
+                continue
+            data_str = line_str[6:]
+            if data_str == "[DONE]":
+                break
+            try:
+                event = json.loads(data_str)
+                event_type = event.get("type", "")
+                if event_type == "response.output_text.delta":
+                    text_parts.append(event.get("delta", ""))
+            except json.JSONDecodeError:
+                continue
+        result = "".join(text_parts)
+        if not result:
+            logger.warning("SSE 응답에서 텍스트를 추출하지 못했습니다.")
+        return result
 
     def _call_openai_api(self, prompt: str, max_tokens: int = 2000) -> str:
         """OPENAI_API_KEY로 표준 OpenAI API를 호출한다 (폴백)."""

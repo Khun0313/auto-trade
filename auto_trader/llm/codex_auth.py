@@ -486,13 +486,21 @@ def ensure_valid_token() -> Optional[str]:
 # 헤더 반환 (갱신 포함)
 # ──────────────────────────────────────────────────────────────
 
+def get_account_id() -> Optional[str]:
+    """auth.json의 tokens.account_id를 반환한다. 없으면 None."""
+    auth = _read_auth_file()
+    tokens = _get_tokens_dict(auth)
+    return tokens.get("account_id") or None
+
+
 def get_auth_headers() -> dict:
-    """API 호출용 Authorization 헤더를 반환한다.
+    """API 호출용 헤더를 반환한다.
 
     필요 시 토큰 자동 갱신을 포함한다.
+    opencode-openai-codex-auth 플러그인과 동일한 헤더를 구성한다.
 
     Returns:
-        {"Authorization": "Bearer <token>", "Content-Type": "application/json"}
+        Authorization, chatgpt-account-id, OpenAI-Beta, originator 등 포함 dict
 
     Raises:
         RuntimeError: 유효한 토큰을 확보할 수 없을 때
@@ -504,10 +512,17 @@ def get_auth_headers() -> dict:
             "  서버:  codex login --device-auth\n"
             "  로컬:  python -m llm.codex_auth --login"
         )
-    return {
+    headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
+        "OpenAI-Beta": "responses=experimental",
+        "originator": "codex_cli_rs",
+        "accept": "text/event-stream",
     }
+    account_id = get_account_id()
+    if account_id:
+        headers["chatgpt-account-id"] = account_id
+    return headers
 
 
 # ──────────────────────────────────────────────────────────────
