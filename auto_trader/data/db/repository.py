@@ -132,6 +132,25 @@ def insert_signal(stock_code: str, strategy: str, signal_type: str,
 
 
 # ------------------------------------------------------------------
+# 오늘 체결 조회
+# ------------------------------------------------------------------
+
+def get_today_trades() -> list[dict]:
+    """오늘 체결된 거래 목록을 반환한다."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    with get_connection() as conn:
+        rows = conn.execute(
+            """SELECT stock_code, side, executed_qty, executed_price,
+                      fee, tax, pnl, strategy, executed_at
+               FROM trades
+               WHERE DATE(executed_at) = ?
+               ORDER BY executed_at DESC""",
+            (today,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ------------------------------------------------------------------
 # 뉴스
 # ------------------------------------------------------------------
 
