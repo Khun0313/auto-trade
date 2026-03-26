@@ -159,8 +159,50 @@ class TradingBot(commands.Bot):
 
         @self.command(name="report")
         async def report(ctx):
-            """일일 보고서를 발송한다."""
-            await ctx.send("보고서 생성 중...")
+            """일일 보고서를 생성하여 발송한다."""
+            await ctx.send("📊 보고서 생성 중... (AI 분석 포함, 30초 내외 소요)")
+            try:
+                if not (self.system and hasattr(self.system, "daily_eval")):
+                    await ctx.send("❌ 평가 모듈이 연결되지 않았습니다.")
+                    return
+
+                regime = ""
+                if hasattr(self.system, "regime_classifier"):
+                    regime = self.system.regime_classifier.current_regime.value
+
+                rep = await self.system.daily_eval.evaluate(market_regime=regime)
+
+                # 전략별 요약
+                strategy_lines = []
+                for strat, stat in rep.get("strategy_stats", {}).items():
+                    cnt = stat["count"]
+                    pnl = stat["pnl"]
+                    wr = stat["wins"] / cnt * 100 if cnt else 0
+                    strategy_lines.append(f"  • {strat}: {cnt}건 | {pnl:+,.0f}원 | 승률 {wr:.0f}%")
+
+                pnl = rep.get("total_pnl", 0)
+                pnl_emoji = "📈" if pnl >= 0 else "📉"
+                lines = [
+                    f"📋 **일일 보고서** ({rep.get('date', '')})",
+                    f"{pnl_emoji} 총 손익: **{pnl:+,.0f}원**",
+                    f"거래: {rep.get('total_trades', 0)}건 "
+                    f"(승 {rep.get('wins', 0)} / 패 {rep.get('losses', 0)} | 승률 {rep.get('win_rate', 0):.0f}%)",
+                    f"장세: {rep.get('market_regime', '-')}",
+                ]
+                if strategy_lines:
+                    lines.append("\n**전략별 성과:**")
+                    lines.extend(strategy_lines)
+
+                ai_text = rep.get("ai_evaluation", "")
+                if ai_text:
+                    lines.append(f"\n🤖 **AI 평가:**\n{ai_text[:1200]}")
+
+                await ctx.send("\n".join(lines))
+                logger.info("!report 명령 처리 완료: PnL=%+.0f", pnl)
+
+            except Exception as e:
+                logger.error("!report 오류: %s", e)
+                await ctx.send(f"❌ 보고서 생성 중 오류: {e}")
 
         @self.command(name="ask")
         async def ask(ctx, *, question: str = ""):
