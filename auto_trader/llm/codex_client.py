@@ -32,8 +32,8 @@ load_dotenv()
 # 모델 설정
 # ──────────────────────────────────────────────────────────────
 
-# OAuth(ChatGPT Plus) 사용 시 모델
-OAUTH_MODEL = "codex"          # 또는 "codex-mini", "gpt-4o" 등
+# OAuth(ChatGPT Plus) 사용 시 모델 (Codex CLI 기본 모델)
+OAUTH_MODEL = "codex-mini-latest"   # 또는 "gpt-4.1", "o4-mini"
 
 # API Key 폴백 시 모델
 FALLBACK_MODEL = "gpt-4o-mini"

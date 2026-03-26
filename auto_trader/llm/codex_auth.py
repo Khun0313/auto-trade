@@ -41,9 +41,9 @@ except ImportError:
 AUTH_FILE      = Path.home() / ".codex" / "auth.json"
 AUTH_META_FILE = Path.home() / ".codex" / "auth_meta.json"  # 자체 추적 메타데이터
 
-# Codex 백엔드 엔드포인트
-CODEX_API_BASE        = "https://chatgpt.com/backend-api"
-CODEX_RESPONSES_URL   = f"{CODEX_API_BASE}/codex/responses"
+# OpenAI Responses API 엔드포인트 (Codex CLI 실제 사용 엔드포인트)
+CODEX_API_BASE        = "https://api.openai.com/v1"
+CODEX_RESPONSES_URL   = f"{CODEX_API_BASE}/responses"
 
 # OpenAI OAuth 토큰 갱신 엔드포인트
 OAUTH_TOKEN_ENDPOINT  = "https://auth.openai.com/oauth/token"
