@@ -90,6 +90,24 @@ else
         echo -e "  ${RED}✘ npm이 없습니다. Node.js를 재설치해주세요.${NC}"
         CODEX_INSTALLED=false
     else
+        # npm 전역 설치 경로를 홈 디렉토리로 설정 (sudo 불필요)
+        NPM_GLOBAL_DIR="$HOME/.npm-global"
+        if [ "$(npm prefix -g 2>/dev/null)" != "$NPM_GLOBAL_DIR" ]; then
+            echo -e "  npm 전역 경로 설정 중... ($NPM_GLOBAL_DIR)"
+            mkdir -p "$NPM_GLOBAL_DIR"
+            npm config set prefix "$NPM_GLOBAL_DIR"
+        fi
+        export PATH="$NPM_GLOBAL_DIR/bin:$PATH"
+
+        # ~/.bashrc에 PATH 영구 등록 (없을 때만)
+        BASHRC="$HOME/.bashrc"
+        if ! grep -q "npm-global/bin" "$BASHRC" 2>/dev/null; then
+            echo "" >> "$BASHRC"
+            echo "# npm 전역 패키지 경로" >> "$BASHRC"
+            echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> "$BASHRC"
+            echo -e "  ${YELLOW}→ ~/.bashrc에 PATH 등록 완료 (다음 로그인부터 영구 적용)${NC}"
+        fi
+
         # Codex CLI 설치 여부 확인
         if command -v codex &> /dev/null; then
             CODEX_VERSION=$(codex --version 2>/dev/null || echo "설치됨")
@@ -97,12 +115,15 @@ else
             CODEX_INSTALLED=true
         else
             echo -e "  Codex CLI를 설치합니다..."
-            if npm install -g @openai/codex 2>&1 | tail -1; then
+            npm install -g @openai/codex
+            INSTALL_EXIT=$?
+
+            if [ $INSTALL_EXIT -eq 0 ] && command -v codex &> /dev/null; then
                 echo -e "  ${GREEN}✔ Codex CLI 설치 완료${NC}"
                 CODEX_INSTALLED=true
             else
-                echo -e "  ${RED}✘ Codex CLI 설치 실패. 권한 문제일 수 있습니다.${NC}"
-                echo -e "    sudo npm install -g @openai/codex 를 직접 실행해보세요."
+                echo -e "  ${RED}✘ Codex CLI 설치 실패.${NC}"
+                echo -e "    npm 로그 확인: ~/.npm/_logs/"
                 CODEX_INSTALLED=false
             fi
         fi
