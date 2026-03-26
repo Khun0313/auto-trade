@@ -25,6 +25,7 @@ from llm.codex_auth import (
     refresh_access_token,
     run_login,
     CODEX_RESPONSES_URL,
+    OPENAI_RESPONSES_URL,
 )
 
 logger = get_logger("codex_client")
@@ -34,10 +35,10 @@ load_dotenv()
 # 모델 설정
 # ──────────────────────────────────────────────────────────────
 
-# OAuth(ChatGPT Plus) 사용 시 모델 (Codex CLI 기본 모델)
-OAUTH_MODEL = "codex-mini-latest"   # 또는 "gpt-4.1", "o4-mini"
+# ChatGPT OAuth 사용 시 모델 (chatgpt.com/backend-api 엔드포인트용)
+OAUTH_MODEL = "gpt-5-codex-mini"
 
-# API Key 폴백 시 모델
+# API Key 폴백 시 모델 (api.openai.com 엔드포인트용)
 FALLBACK_MODEL = "gpt-4o-mini"
 
 
@@ -64,6 +65,8 @@ class CodexClient:
 
         # ── 2) auth_mode 확인: apiKey 모드면 OAuth 시도하지 않음 ──
         auth_mode = get_auth_mode()
+        logger.info("auth_mode: %s", auth_mode)
+
         if auth_mode == "apiKey":
             self._use_oauth = False
             if api_key:
@@ -73,9 +76,12 @@ class CodexClient:
                     "auth_mode=apiKey 이나 API Key가 없습니다. "
                     ".env에 OPENAI_API_KEY를 설정하세요."
                 )
-        elif is_logged_in():
+        elif auth_mode in ("chatgpt", "oauth") and is_logged_in():
             self._use_oauth = True
-            logger.info("ChatGPT OAuth 방식으로 초기화 (ChatGPT Plus)")
+            logger.info(
+                "ChatGPT OAuth 방식으로 초기화 (ChatGPT Plus) — "
+                "엔드포인트: %s", CODEX_RESPONSES_URL
+            )
         else:
             self._use_oauth = False
             if api_key:
@@ -94,13 +100,28 @@ class CodexClient:
     # ──────────────────────────────────────────────
 
     def _call_oauth(self, prompt: str, max_tokens: int = 2000) -> str:
-        """OAuth 토큰으로 Codex API를 호출한다."""
+        """ChatGPT OAuth 토큰으로 Codex 백엔드 API를 호출한다.
+
+        엔드포인트: https://chatgpt.com/backend-api/codex/responses
+        OpenCode의 opencode-openai-codex-auth 플러그인과 동일한 방식.
+        """
         import requests
 
         headers = get_auth_headers()
         payload = {
             "model": OAUTH_MODEL,
-            "input": prompt,
+            "instructions": "You are a helpful AI assistant for Korean stock market analysis.",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": prompt}],
+                }
+            ],
+            "store": False,
+            "stream": False,
+            "include": ["reasoning.encrypted_content"],
+            "reasoning": {"summary": "auto"},
             "max_output_tokens": max_tokens,
         }
 
@@ -109,49 +130,56 @@ class CodexClient:
                 CODEX_RESPONSES_URL,
                 headers=headers,
                 json=payload,
-                timeout=30,
+                timeout=60,
             )
             resp.raise_for_status()
             data = resp.json()
             return self._extract_text_from_response(data)
 
         except requests.HTTPError as e:
-            if e.response is not None and e.response.status_code == 401:
+            status = e.response.status_code if e.response is not None else 0
+            body = e.response.text[:300] if e.response is not None else ""
+            logger.warning("OAuth HTTP %s: %s", status, body)
+
+            if status == 401:
                 # 1차: refresh_token으로 재발급 시도
                 logger.warning("OAuth 401 — refresh_token으로 토큰 갱신 시도...")
                 new_token = refresh_access_token()
                 if new_token:
-                    # 갱신 성공 → 새 헤더로 1회 재시도
                     logger.info("토큰 갱신 성공. 요청 재시도...")
                     headers = get_auth_headers()
                     resp2 = requests.post(
                         CODEX_RESPONSES_URL,
                         headers=headers,
                         json=payload,
-                        timeout=30,
+                        timeout=60,
                     )
                     resp2.raise_for_status()
                     return self._extract_text_from_response(resp2.json())
                 else:
-                    # 2차: refresh 실패 → Discord 경고 + API Key 폴백
                     logger.warning("토큰 갱신 실패. OPENAI_API_KEY 폴백으로 전환합니다.")
                     _notify_relogin_required()
                     return self._call_openai_api(prompt, max_tokens)
             raise
 
     def _extract_text_from_response(self, data: dict) -> str:
-        """Codex API 응답에서 텍스트를 추출한다."""
-        # 응답 구조: {"output": [{"type": "message", "content": [{"text": "..."}]}]}
+        """Codex 백엔드 API 응답에서 텍스트를 추출한다."""
+        # Codex 응답 구조: {"output": [{"type": "message", "content": [{"type": "output_text", "text": "..."}]}]}
         output = data.get("output", [])
         for item in output:
             if item.get("type") == "message":
                 for content in item.get("content", []):
                     if content.get("type") == "output_text":
                         return content.get("text", "")
+                    # text 키만 있는 경우
+                    if "text" in content and content.get("type") != "input_text":
+                        return content["text"]
         # 폴백: choices 형식 (표준 OpenAI 응답)
         choices = data.get("choices", [])
         if choices:
             return choices[0].get("message", {}).get("content", "")
+        # 최후 폴백: 전체 응답 문자열화
+        logger.warning("응답에서 텍스트 추출 실패. 전체 응답: %s", str(data)[:300])
         return str(data)
 
     def _call_openai_api(self, prompt: str, max_tokens: int = 2000) -> str:
