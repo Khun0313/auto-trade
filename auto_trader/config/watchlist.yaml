@@ -1,0 +1,38 @@
+# === 관심종목 ===
+
+# 고정 ETF 유니버스
+etf:
+  - code: "132030"
+    name: "KODEX 골드선물(H)"
+    category: gold
+  - code: "144600"
+    name: "KODEX 은선물(H)"
+    category: silver
+  - code: "148070"
+    name: "KOSEF 국고채10년"
+    category: bond
+  - code: "261240"
+    name: "KODEX 미국달러선물"
+    category: dollar
+  - code: "261220"
+    name: "KODEX 미국달러선물인버스"
+    category: dollar_inverse
+  - code: "069500"
+    name: "KODEX 200"
+    category: kospi
+  - code: "114800"
+    name: "KODEX 인버스"
+    category: kospi_inverse
+  - code: "530060"
+    name: "KODEX WTI원유선물(H)"
+    category: oil
+
+# 수동 관심종목
+manual:
+  - code: "005930"
+    name: "삼성전자"
+  - code: "000660"
+    name: "SK하이닉스"
+
+# 블랙리스트 (매매 제외)
+blacklist: []

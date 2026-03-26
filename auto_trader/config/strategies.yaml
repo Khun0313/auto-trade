@@ -1,0 +1,67 @@
+# === 전략 파라미터 ===
+
+# 장세별 전략 가중치
+regime_weights:
+  strong_bull:    # 강한 상승
+    volatility_breakout: 0.35
+    moving_average: 0.25
+    rsi_envelope: 0.10
+    envelope: 0.10
+    news_sentiment: 0.20
+  weak_bull:      # 약한 상승
+    volatility_breakout: 0.25
+    moving_average: 0.30
+    rsi_envelope: 0.15
+    envelope: 0.15
+    news_sentiment: 0.15
+  sideways:       # 횡보
+    volatility_breakout: 0.10
+    moving_average: 0.15
+    rsi_envelope: 0.30
+    envelope: 0.30
+    news_sentiment: 0.15
+  weak_bear:      # 약한 하락
+    volatility_breakout: 0.05
+    moving_average: 0.10
+    rsi_envelope: 0.35
+    envelope: 0.30
+    news_sentiment: 0.20
+  strong_bear:    # 강한 하락
+    volatility_breakout: 0.00
+    moving_average: 0.05
+    rsi_envelope: 0.35
+    envelope: 0.35
+    news_sentiment: 0.25
+
+# 개별 전략 파라미터
+strategies:
+  volatility_breakout:
+    k_value: 0.5
+    volume_threshold: 1.5  # 평균 대비 거래량 배수
+    enabled: true
+
+  moving_average:
+    short_period: 5
+    mid_period: 20
+    long_period: 60
+    enabled: true
+
+  rsi_envelope:
+    rsi_period: 14
+    rsi_oversold: 30
+    rsi_overbought: 70
+    bb_period: 20
+    bb_std: 2.0
+    enabled: true
+
+  envelope:
+    ma_period: 20
+    upper_pct: 5.0
+    lower_pct: -5.0
+    enabled: true
+
+  news_sentiment:
+    min_score: 0.3           # 최소 감성 점수
+    tech_confirm: true       # 기술적 확인 필요
+    max_news_age_hours: 4    # 뉴스 유효 시간
+    enabled: true

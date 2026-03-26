@@ -1,0 +1,28 @@
+# Environment
+.env
+.venv/
+venv/
+
+# Data
+data/db/*.db
+data/logs/
+data/reports/
+data/token.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

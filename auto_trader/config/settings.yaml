@@ -1,0 +1,104 @@
+# === 시스템 설정 ===
+system:
+  mode: paper  # paper(모의투자) / live(실전)
+  timezone: Asia/Seoul
+  log_level: INFO
+  log_retention_days: 30
+
+# === API 설정 ===
+api:
+  paper:
+    base_url: https://openapivts.koreainvestment.com:29443
+    ws_url: ws://ops.koreainvestment.com:31000
+  live:
+    base_url: https://openapi.koreainvestment.com:9443
+    ws_url: ws://ops.koreainvestment.com:21000
+
+# === 쓰로틀링 ===
+throttle:
+  paper:
+    requests_per_second: 4
+  live:
+    requests_per_second: 15
+
+# === 토큰 ===
+token:
+  cache_path: data/token.json
+  refresh_before_hours: 1  # 만료 1시간 전 갱신
+
+# === 데이터 수집 ===
+data_collection:
+  minute_candle_interval: 5       # 분봉 주기 (분)
+  price_poll_interval: 60         # 현재가 조회 주기 (초)
+  balance_poll_interval: 600      # 잔고 조회 주기 (초)
+  investor_trend_interval: 1800   # 투자자 동향 주기 (초)
+
+# === WebSocket ===
+websocket:
+  max_subscriptions: 41
+  reconnect_base_delay: 1    # 초
+  reconnect_max_delay: 60    # 초
+  heartbeat_interval: 30     # 초
+
+# === 리스크 관리 ===
+risk:
+  max_position_pct: 10       # 단일종목 최대 비중 (%)
+  trade_risk_pct: 2          # 거래당 위험 (%)
+  daily_loss_limit_pct: 5    # 일일 최대 손실 (%)
+  max_positions: 10          # 최대 보유 종목 수
+  min_cash_pct: 20           # 최소 현금 비중 (%)
+  stop_loss_pct: -3          # 손절매 (%)
+  trailing_stop_pct: -2      # 추적 손절 (%)
+  partial_take_profit_pct: 5 # 부분 익절 (%)
+  full_take_profit_pct: 10   # 전량 익절 (%)
+  time_stop_days: 3          # 시간 손절 (거래일)
+
+# === 서킷 브레이커 ===
+circuit_breaker:
+  daily_loss_pct: 5          # 일일 5% 손실 시 정지
+  consecutive_losses: 3       # 연속 3회 손절 시 정지
+  weekly_loss_pct: 10        # 주간 10% 손실 시 정지
+  api_error_count: 5         # API 오류 5회 시 정지
+
+# === 신호 ===
+signal:
+  buy_threshold: 0.6
+  sell_threshold: -0.6
+  high_confidence: 0.8       # 시장가 주문 임계값
+
+# === 주문 ===
+order:
+  limit_offset_pct: 0.3      # 지정가 오프셋 (%)
+  slippage_warn_pct: 0.5     # 슬리피지 경고 (%)
+  duplicate_window_min: 5    # 중복 확인 윈도우 (분)
+
+# === 뉴스 수집 ===
+news:
+  collection_times: ["08:00", "12:00", "14:00"]
+  sources:
+    - naver_finance
+    - hankyung
+    - krx_disclosure
+
+# === 스케줄 ===
+schedule:
+  system_start: "07:30"
+  morning_news: "08:00"
+  screening: "08:30"
+  market_analysis: "08:50"
+  trading_start: "09:05"
+  trading_end: "15:20"
+  cancel_pending: "15:30"
+  daily_report: "15:40"
+  weekly_evaluation: "16:00"  # 금요일만
+  weekly_rebalance: "16:30"   # 금요일만
+  system_stop: "18:00"
+
+# === 대시보드 ===
+dashboard:
+  port: 8501
+  refresh_interval: 5  # 초
+
+# === DB ===
+database:
+  path: data/db/auto_trader.db
