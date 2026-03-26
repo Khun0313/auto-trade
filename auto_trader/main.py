@@ -1,6 +1,7 @@
 """메인 진입점: 기동 → 토큰 → 스케줄 → 이벤트 루프."""
 
 import asyncio
+import os
 import signal
 import sys
 from datetime import datetime
@@ -33,6 +34,7 @@ from strategies.moving_average import MovingAverage
 from strategies.rsi_envelope import RSIEnvelope
 from strategies.envelope import Envelope
 from strategies.news_sentiment import NewsSentiment
+from notifications.discord_bot import TradingBot
 from utils.logger import setup_logger
 from utils.throttle import init_throttler
 
@@ -80,6 +82,7 @@ class AutoTrader:
         self.strategy_eval = StrategyEvaluator(self.tracker)
         self.weekly_upgrader = WeeklyUpgrader(self.codex)
         self.scheduler = TradingScheduler()
+        self.discord_bot = TradingBot(system_ref=self)
 
         # 전략 등록
         self._register_strategies()
@@ -184,16 +187,29 @@ class AutoTrader:
             except NotImplementedError:
                 pass  # Windows
 
-        # 메인 루프
+        # Discord 봇 + 메인 루프 병렬 실행
+        token = os.getenv("DISCORD_BOT_TOKEN", "")
+        if not token:
+            logger.warning("DISCORD_BOT_TOKEN 미설정 — Discord 봇 없이 실행")
+
         try:
-            while self._running:
-                await asyncio.sleep(1)
+            tasks = [self._main_loop()]
+            if token:
+                tasks.append(self.discord_bot.start(token))
+            await asyncio.gather(*tasks)
         except KeyboardInterrupt:
             pass
         finally:
             self.scheduler.stop()
             await self.collector.stop_websocket()
+            if not self.discord_bot.is_closed():
+                await self.discord_bot.close()
             logger.info("=== 시스템 종료 ===")
+
+    async def _main_loop(self):
+        """메인 대기 루프."""
+        while self._running:
+            await asyncio.sleep(1)
 
     def _shutdown(self):
         self._running = False
