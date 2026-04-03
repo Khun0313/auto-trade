@@ -62,8 +62,8 @@ circuit_breaker:
 
 # === 신호 ===
 signal:
-  buy_threshold: 0.6
-  sell_threshold: -0.6
+  buy_threshold: 0.4
+  sell_threshold: -0.4
   high_confidence: 0.8       # 시장가 주문 임계값
 
 # === 주문 ===

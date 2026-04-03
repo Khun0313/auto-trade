@@ -36,7 +36,7 @@ class SignalGenerator:
 
     def _load_thresholds(self):
         """settings.yaml에서 임계값을 로드한다."""
-        with open(CONFIG_DIR / ".." / "config" / "settings.yaml", "r", encoding="utf-8") as f:
+        with open(CONFIG_DIR / "settings.yaml", "r", encoding="utf-8") as f:
             settings = yaml.safe_load(f)
         sig_cfg = settings.get("signal", {})
         self.buy_threshold = sig_cfg.get("buy_threshold", 0.6)
@@ -72,7 +72,7 @@ class SignalGenerator:
                     market_regime=regime.value,
                 )
 
-                logger.debug(
+                logger.info(
                     "%s [%s] score=%.2f, weight=%.2f, conf=%.2f → %.3f",
                     stock_code, strategy.name, signal.score, weight, signal.confidence, weighted,
                 )

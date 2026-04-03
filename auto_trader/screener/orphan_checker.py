@@ -40,8 +40,15 @@ class OrphanChecker:
         for pos in positions:
             code = pos["code"]
             name = pos.get("name", code)
-            buy_date = datetime.fromisoformat(pos["buy_date"])
+            try:
+                buy_date = datetime.fromisoformat(pos["buy_date"])
+            except (ValueError, TypeError):
+                logger.warning("%s 매수일 파싱 실패: %s — 스킵", code, pos.get("buy_date"))
+                continue
             holding_days = (now - buy_date).days
+            if pos["buy_price"] <= 0:
+                logger.warning("%s 매수가 0 — 스킵", code)
+                continue
             pnl_pct = ((pos["current_price"] - pos["buy_price"]) / pos["buy_price"]) * 100
 
             # 최대 보유기간 초과

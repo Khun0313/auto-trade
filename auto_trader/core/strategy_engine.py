@@ -41,6 +41,11 @@ class StrategyEngine:
                 active.append(strategy)
         return active
 
+    def reload_weights(self, regime_weights: dict[str, dict[str, float]]):
+        """외부에서 갱신된 장세별 가중치를 반영한다."""
+        self.regime_weights = regime_weights
+        logger.info("가중치 리로드 완료: %d개 장세", len(regime_weights))
+
     def get_weight(self, strategy_name: str, regime: MarketRegime) -> float:
         """특정 전략의 장세별 가중치를 반환한다."""
         return self.regime_weights.get(regime.value, {}).get(strategy_name, 0.0)

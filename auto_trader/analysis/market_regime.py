@@ -40,29 +40,29 @@ class MarketRegimeClassifier:
         Returns:
             MarketRegime 열거형.
         """
-        if len(kospi_df) < 60:
+        if len(kospi_df) < 40:
             logger.warning("데이터 부족 (%d일). 횡보로 판단.", len(kospi_df))
             return MarketRegime.SIDEWAYS
 
         close = kospi_df["close"].astype(float)
 
-        # 이동평균
+        # 이동평균 (API 50건 제한 고려, 60→40일)
         ma5 = close.rolling(5).mean()
         ma20 = close.rolling(20).mean()
-        ma60 = close.rolling(60).mean()
+        ma40 = close.rolling(40).mean()
 
         latest_close = close.iloc[-1]
         latest_ma5 = ma5.iloc[-1]
         latest_ma20 = ma20.iloc[-1]
-        latest_ma60 = ma60.iloc[-1]
+        latest_ma40 = ma40.iloc[-1]
 
         # MA 배열 점수 (-2 ~ +2)
         ma_score = 0
-        if latest_ma5 > latest_ma20 > latest_ma60:
+        if latest_ma5 > latest_ma20 > latest_ma40:
             ma_score = 2  # 정배열
         elif latest_ma5 > latest_ma20:
             ma_score = 1
-        elif latest_ma5 < latest_ma20 < latest_ma60:
+        elif latest_ma5 < latest_ma20 < latest_ma40:
             ma_score = -2  # 역배열
         elif latest_ma5 < latest_ma20:
             ma_score = -1
@@ -73,7 +73,7 @@ class MarketRegimeClassifier:
             price_score += 1
         else:
             price_score -= 1
-        if latest_close > latest_ma60:
+        if latest_close > latest_ma40:
             price_score += 1
         else:
             price_score -= 1

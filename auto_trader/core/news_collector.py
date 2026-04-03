@@ -50,14 +50,13 @@ class NewsCollector:
                     html = await resp.text()
 
             soup = BeautifulSoup(html, "lxml")
-            articles = soup.select("ul.newsList li")
+            articles = soup.select(".articleSubject a")
 
-            for article in articles[:20]:
-                title_tag = article.select_one("a")
-                if not title_tag:
+            for title_tag in articles[:20]:
+                title = title_tag.get_text(strip=True)
+                if not title:
                     continue
 
-                title = title_tag.get_text(strip=True)
                 url = title_tag.get("href", "")
                 if url and not url.startswith("http"):
                     url = f"https://finance.naver.com{url}"
@@ -85,7 +84,7 @@ class NewsCollector:
                     html = await resp.text()
 
             soup = BeautifulSoup(html, "lxml")
-            articles = soup.select("h3.news-tit a, .article-list a.tit")
+            articles = soup.select(".news-tit a")
 
             for article in articles[:20]:
                 title = article.get_text(strip=True)

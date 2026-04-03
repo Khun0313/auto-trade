@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=trader
-WorkingDirectory=/home/trader/auto_trader
-ExecStart=/home/trader/auto_trader/.venv/bin/python main.py
+User=tjrgn
+WorkingDirectory=/home/tjrgn/workspace/auto-trade/auto_trader
+ExecStart=/home/tjrgn/workspace/auto-trade/auto_trader/venv/bin/python3 main.py
 Restart=always
 RestartSec=10
 Environment=PYTHONUNBUFFERED=1

@@ -23,8 +23,9 @@ etf:
   - code: "114800"
     name: "KODEX 인버스"
     category: kospi_inverse
-  - code: "530060"
-    name: "KODEX WTI원유선물(H)"
+  # 530060 KODEX WTI원유선물(H) — 2026-03-30 확인: API 가격 0, 상장폐지/코드변경 의심. 제거.
+  - code: "261110"
+    name: "KODEX WTI원유선물(H)2X"
     category: oil
 
 # 수동 관심종목

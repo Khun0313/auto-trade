@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 import websockets
@@ -29,6 +29,29 @@ class DataCollector:
     # REST API 수집
     # ==================================================================
 
+    @staticmethod
+    async def _request_with_retry(session, url, headers, params,
+                                  max_retries: int = 3, base_delay: float = 1.0) -> dict:
+        """API 요청 + rate limit 에러 시 재시도."""
+        for attempt in range(max_retries):
+            async with session.get(url, headers=headers, params=params) as resp:
+                data = await resp.json()
+
+            rt_cd = data.get("rt_cd")
+            if rt_cd == "0":  # 정상
+                return data
+            if rt_cd == "1" and "초당" in data.get("msg1", ""):
+                delay = base_delay * (2 ** attempt)
+                logger.warning("API rate limit (%s) — %.1f초 후 재시도 (%d/%d)",
+                               params.get("FID_INPUT_ISCD", ""), delay, attempt + 1, max_retries)
+                await asyncio.sleep(delay)
+                continue
+            # 기타 에러는 바로 반환
+            return data
+
+        logger.error("API 재시도 초과: %s", params.get("FID_INPUT_ISCD", ""))
+        return data  # 마지막 응답 반환
+
     @throttle
     async def fetch_minute_candles(self, stock_code: str, period: str = "5") -> list[dict]:
         """분봉 데이터를 조회하여 DB에 저장한다.
@@ -49,8 +72,7 @@ class DataCollector:
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as resp:
-                data = await resp.json()
+            data = await self._request_with_retry(session, url, headers, params)
 
         candles = data.get("output2", [])
         saved = 0
@@ -86,8 +108,7 @@ class DataCollector:
         }
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as resp:
-                data = await resp.json()
+            data = await self._request_with_retry(session, url, headers, params)
 
         output = data.get("output")
         if output:
@@ -97,25 +118,48 @@ class DataCollector:
     @throttle
     async def fetch_daily_candles(self, stock_code: str, start_date: str = "",
                                   end_date: str = "", period: str = "D") -> list[dict]:
-        """일봉 데이터를 조회하여 DB에 저장한다."""
+        """일봉 데이터를 조회하여 DB에 저장한다.
+
+        API 최대 50건 제한이므로 2회 호출하여 100건까지 확보한다.
+        """
         tr_id = "FHKST03010100"
         url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
-        headers = self.auth.get_headers(tr_id)
-        params = {
-            "FID_COND_MRKT_DIV_CODE": "J",
-            "FID_INPUT_ISCD": stock_code,
-            "FID_INPUT_DATE_1": start_date or datetime.now().strftime("%Y%m%d"),
-            "FID_INPUT_DATE_2": end_date or datetime.now().strftime("%Y%m%d"),
-            "FID_PERIOD_DIV_CODE": period,
-            "FID_ORG_ADJ_PRC": "0",
-        }
+        end = end_date or datetime.now().strftime("%Y%m%d")
+        start = start_date or (datetime.now() - timedelta(days=180)).strftime("%Y%m%d")
 
+        all_candles: list[dict] = []
+        seen_dates: set[str] = set()
+
+        cur_end = end
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, params=params) as resp:
-                data = await resp.json()
+            for _ in range(2):
+                headers = self.auth.get_headers(tr_id)
+                params = {
+                    "FID_COND_MRKT_DIV_CODE": "J",
+                    "FID_INPUT_ISCD": stock_code,
+                    "FID_INPUT_DATE_1": start,
+                    "FID_INPUT_DATE_2": cur_end,
+                    "FID_PERIOD_DIV_CODE": period,
+                    "FID_ORG_ADJ_PRC": "0",
+                }
+                data = await self._request_with_retry(session, url, headers, params)
+                candles = data.get("output2", [])
+                if not candles:
+                    break
 
-        candles = data.get("output2", [])
-        for c in candles:
+                for c in candles:
+                    dt = c.get("stck_bsop_date", "")
+                    if dt and dt not in seen_dates:
+                        seen_dates.add(dt)
+                        all_candles.append(c)
+
+                oldest = candles[-1].get("stck_bsop_date", "")
+                if oldest <= start:
+                    break
+                cur_end = (datetime.strptime(oldest, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+                await asyncio.sleep(0.3)
+
+        for c in all_candles:
             try:
                 insert_price(
                     stock_code=stock_code,
@@ -130,8 +174,77 @@ class DataCollector:
             except (KeyError, ValueError) as e:
                 logger.warning("일봉 파싱 오류 (%s): %s", stock_code, e)
 
-        logger.debug("%s 일봉 %d건 저장", stock_code, len(candles))
-        return candles
+        logger.debug("%s 일봉 %d건 저장", stock_code, len(all_candles))
+        return all_candles
+
+    @throttle
+    async def fetch_index_daily_candles(self, index_code: str = "0001",
+                                         start_date: str = "",
+                                         end_date: str = "") -> list[dict]:
+        """업종지수(KOSPI 등) 일봉 데이터를 조회한다.
+
+        API가 최대 50건만 반환하므로 2회 호출하여 이어붙인다.
+
+        Args:
+            index_code: 업종 코드 ("0001"=KOSPI, "1001"=KOSDAQ 등).
+        """
+        tr_id = "FHKUP03500100"
+        url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        end = end_date or datetime.now().strftime("%Y%m%d")
+        start = start_date or (datetime.now() - timedelta(days=90)).strftime("%Y%m%d")
+
+        all_candles: list[dict] = []
+        seen_dates: set[str] = set()
+
+        # 최대 2회 호출 (50건 × 2 = 100건)
+        cur_end = end
+        for _ in range(2):
+            headers = self.auth.get_headers(tr_id)
+            params = {
+                "FID_COND_MRKT_DIV_CODE": "U",
+                "FID_INPUT_ISCD": index_code,
+                "FID_INPUT_DATE_1": start,
+                "FID_INPUT_DATE_2": cur_end,
+                "FID_PERIOD_DIV_CODE": "D",
+            }
+
+            async with aiohttp.ClientSession() as session:
+                data = await self._request_with_retry(session, url, headers, params)
+
+            candles = data.get("output2", [])
+            if not candles:
+                break
+
+            for c in candles:
+                dt = c.get("stck_bsop_date", "")
+                if dt and dt not in seen_dates:
+                    seen_dates.add(dt)
+                    all_candles.append(c)
+
+            # 다음 호출: 가장 오래된 날짜 - 1일을 끝으로
+            oldest = candles[-1].get("stck_bsop_date", "")
+            if oldest <= start:
+                break
+            cur_end = (datetime.strptime(oldest, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+            await asyncio.sleep(0.3)  # rate limit 방지
+
+        # 필드명 통일 (업종지수 → 개별종목 형식)
+        normalized = []
+        for c in all_candles:
+            try:
+                normalized.append({
+                    "stck_bsop_date": c["stck_bsop_date"],
+                    "stck_oprc": c["bstp_nmix_oprc"],
+                    "stck_hgpr": c["bstp_nmix_hgpr"],
+                    "stck_lwpr": c["bstp_nmix_lwpr"],
+                    "stck_clpr": c["bstp_nmix_prpr"],
+                    "acml_vol": c.get("acml_vol", "0"),
+                })
+            except KeyError as e:
+                logger.warning("지수 일봉 파싱 오류 (%s): %s", index_code, e)
+
+        logger.debug("지수 %s 일봉 %d건 조회", index_code, len(normalized))
+        return normalized
 
     @throttle
     async def fetch_balance(self) -> dict | None:
